@@ -1,0 +1,83 @@
+<html>
+	<head>
+		<title>ECMAPC - a PC emulator written in Javascript.</title>
+		<script type="text/javascript">
+			function setPixel(imageData, x, y, r, g, b)
+			{
+				var index = (x + y * imageData.width) * 4;
+				imageData.data[index+0] = r;
+				imageData.data[index+1] = g;
+				imageData.data[index+2] = b;
+				imageData.data[index+3] = 255;
+			}
+			function rstart(evt)
+			{
+				var bios = evt.target.result;
+				var biosa = new Uint8Array(bios);
+				var memory = new Uint8Array(0X100000);
+				var biosfile = document.forms['upload']['bios'].files[0];
+				memory.set(biosa,0x100000 - biosfile.size);
+				var cpu = new CPU('8086',memory);
+				for(var i = 0;i<40;i++)
+				{
+					cpu.exec();
+				}
+			}
+			function start()
+			{
+				var biosfile = document.forms['upload']['bios'].files[0];
+				if(biosfile)
+				{
+					var reader = new FileReader();
+					reader.readAsArrayBuffer(biosfile);
+					reader.onload = rstart;
+				}
+			}
+		</script>
+		<script type="text/javascript" src="cpu.js"></script>
+	</head>
+	<body>
+		<p>Main BIOS File: </p>
+		<form id="upload">
+		<input type="file" id="bios" />
+		<input type="button" value="Submit" onclick="start();" />
+		<p>MDA ROM File: </p>
+		<input type="file" id="mda" />
+		</form>
+		<br />
+		<canvas id="screen" width="720" height="350"></canvas>
+		<script type="text/javascript">
+			var screen = document.getElementById('screen');
+			var context = screen.getContext('2d');
+
+			var w = screen.width;
+			var h = screen.height;
+
+			var data = context.createImageData(w,h);
+
+			for(var i = 0;i<720;i++)
+			{
+				for(var j = 0;j<350;j++)
+				{
+					setPixel(data,i,j,0,0,0);
+				}
+			}
+
+			context.putImageData(data,0,0);
+
+			if (window.File && window.FileReader && window.FileList && window.Blob)
+			{
+			}
+			else
+			{
+  				alert('Your browser sucks, get a better one.');
+			}
+		</script>
+		<br />
+		<br />
+		<div id="debugger" style="border: 1px solid black;min-height: 500px;width: 720px;">
+			<h3 style="margin-left:20px">Debug stuffs.</h3>
+			<p id="opcode"></p>
+		</div>
+	</body>
+</html>
