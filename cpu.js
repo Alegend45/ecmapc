@@ -162,6 +162,98 @@ function CPU(type,mem)
 				else this.flags |= 0x0004;
 				break;
 			}
+			case 0x26:
+			{
+				var op2 = this.memory[((this.cs<<4)+this.ip)+1];
+				switch(op2)
+				{
+					case 0x3A:
+					{
+						var modrm = this.memory[((this.cs<<4)+this.ip)+2];
+						switch(modrm)
+						{
+							case 0x05:
+							{
+								document.getElementById('opcode').innerHTML += '<br />' + 'CMP AL, BYTE PTR ES:[DI]';
+								var tmp1 = this.ax - this.memory[(this.es<<4)+this.di];
+								if(tmp1 == 0) this.flags |= 0x0040;
+								else this.flags &= 0xFFBF;
+								var tmp2 = 0;
+								for(var i = 0;i<8;i++)
+								{
+									if(tmp1 & (1<<i)) tmp2 = (tmp2 + 1) & 1;
+								}
+								if(tmp2&1) this.flags &= 0xFFFB;
+								else this.flags |= 0x0004;
+								if(tmp1>=0x80) this.flags |= 0x0080;
+								else this.flags &= 0xFF7F;
+								break;
+							}
+						}
+						this.ip++;
+						break;
+					}
+					case 0x3B:
+					{
+						var modrm = this.memory[((this.cs<<4)+this.ip)+2];
+						switch(modrm)
+						{
+							case 0x15:
+							{
+								document.getElementById('opcode').innerHTML += '<br />' + 'CMP DX, WORD PTR ES:[DI]';
+								var tmp1 = this.dx - (this.memory[(this.es<<4)+this.di] | (this.memory[(this.es<<4)+this.di+1]<<8));
+								if(tmp1 == 0) this.flags |= 0x0040;
+								else this.flags &= 0xFFBF;
+								var tmp2 = 0;
+								for(var i = 0;i<16;i++)
+								{
+									if(tmp1 & (1<<i)) tmp2 = (tmp2 + 1) & 1;
+								}
+								if(tmp2&1) this.flags &= 0xFFFB;
+								else this.flags |= 0x0004;
+								if(tmp1>=0x8000) this.flags |= 0x0080;
+								else this.flags &= 0xFF7F;
+								break;
+							}
+						}
+						this.ip++;
+						break;
+					}
+					case 0x88:
+					{
+						var modrm = this.memory[((this.cs<<4)+this.ip)+2];
+						switch(modrm)
+						{
+							case 0x05:
+							{
+								document.getElementById('opcode').innerHTML += '<br />' + 'MOV BYTE PTR ES:[DI], AL';
+								this.memory[(this.es<<4)+this.di] = this.ax & 0xFF;
+								break;
+							}
+						}
+						this.ip++;
+						break;
+					}
+					case 0x89:
+					{
+						var modrm = this.memory[((this.cs<<4)+this.ip)+2];
+						switch(modrm)
+						{
+							case 0x15:
+							{
+								document.getElementById('opcode').innerHTML += '<br />' + 'MOV WORD PTR ES:[DI], DX';
+								this.memory[(this.es<<4)+this.di] = this.dx & 0xFF;
+								this.memory[(this.es<<4)+this.di+1] = (this.dx >> 8) & 0xFF;
+								break;
+							}
+						}
+						this.ip++;
+						break;
+					}
+				}
+				this.ip+=2;
+				break;
+			}
 			case 0x2D:
 			{
 				var tmp = (this.memory[((this.cs<<4)+this.ip)+2]<<8)|this.memory[((this.cs<<4)+this.ip)+1];
@@ -190,6 +282,14 @@ function CPU(type,mem)
 					{
 						this.ax = 0; //XOR 0,0 gives 0, and XOR 1,1 gives 0, so XORing any value with itself gives 0.
 						document.getElementById('opcode').innerHTML += '<br />' + 'XOR AX, AX';
+						this.flags &= 0xFFBA;
+						this.flags |= 0x0044;
+						break;
+					}
+					case 0xFF:
+					{
+						this.di = 0; //XOR 0,0 gives 0, and XOR 1,1 gives 0, so XORing any value with itself gives 0.
+						document.getElementById('opcode').innerHTML += '<br />' + 'XOR DI, DI';
 						this.flags &= 0xFFBA;
 						this.flags |= 0x0044;
 						break;
@@ -246,6 +346,22 @@ function CPU(type,mem)
 				if(this.ax >= 0x8000) this.flags |= 0x0800;
 				else this.flags &= 0xF7FF;
 				this.ip++;
+				break;
+			}
+			case 0x53:
+			{
+				document.getElementById('opcode').innerHTML += '<br />' + 'PUSH BX';
+				this.sp-=2;
+				this.memory[(this.ss<<4)+this.sp] = this.bx >> 8;
+				this.memory[(this.ss<<4)+this.sp+1] = this.bx & 0xFF;
+				break;
+			}
+			case 0x55:
+			{
+				document.getElementById('opcode').innerHTML += '<br />' + 'PUSH BP';
+				this.sp-=2;
+				this.memory[(this.ss<<4)+this.sp] = this.bp >> 8;
+				this.memory[(this.ss<<4)+this.sp+1] = this.bp & 0xFF;
 				break;
 			}
 			case 0x70:
@@ -383,6 +499,59 @@ function CPU(type,mem)
 				this.ip += 2;
 				break;
 			}
+			case 0x80:
+			{
+				var modrm = this.memory[((this.cs<<4)+this.ip)+1];
+				switch(modrm)
+				{
+					case 0xC7:
+					{
+						var tmp = this.memory[((this.cs<<4)+this.ip)+2];
+						document.getElementById('opcode').innerHTML += '<br />' + 'ADD BH, ' + tmp;
+						this.bx = (this.bx & 0xFF) | ((this.bx & 0xFF00) + (tmp << 8));
+						break;
+					}
+					case 0xFF:
+					{
+						var tmp = this.memory[((this.cs<<4)+this.ip)+2];
+						document.getElementById('opcode').innerHTML += '<br />' + 'CMP BH, ' + tmp;
+						var tmp1 = (this.bx & 0xFF00) >> 8;
+						tmp1 -= tmp;
+						if(tmp1 == 0) this.flags |= 0x0040;
+						else this.flags &= 0xFFBF;
+						var tmp2 = 0;
+						for(var i = 0;i<8;i++)
+						{
+							if(tmp1 & (1<<i)) tmp2 = (tmp2 + 1) & 1;
+						}
+						if(tmp2&1) this.flags &= 0xFFFB;
+						else this.flags |= 0x0004;
+						if(tmp1>=0x80) this.flags |= 0x0080;
+						else this.flags &= 0xFF7F;
+						break;
+					}
+				}
+				this.ip+=3;
+				break;
+			}
+			case 0x89:
+			{
+				var modrm = this.memory[((this.cs<<4)+this.ip)+1];
+				switch(modrm)
+				{
+					case 0x36:
+					{
+						var tmp = (this.memory[((this.cs<<4)+this.ip)+2]<<8)|this.memory[((this.cs<<4)+this.ip)+1];
+						document.getElementById('opcode').innerHTML += '<br />' + 'MOV WORD PTR DS:' + tmp + ', SI';
+						(this.memory[((this.ds<<4)+tmp)+1]<<8)|this.memory[((this.ds<<4)+tmp)] = this.si >> 8;
+						(this.memory[((this.ds<<4)+tmp)+1]<<8)|this.memory[((this.ds<<4)+tmp)] = this.si & 0xFF;
+						this.ip+=2;
+						break;
+					}
+				}
+				this.ip+=2;
+				break;
+			}
 			case 0x8B:
 			{
 				var modrm = this.memory[((this.cs<<4)+this.ip)+1];
@@ -419,6 +588,12 @@ function CPU(type,mem)
 					{
 						document.getElementById('opcode').innerHTML += '<br />' + 'MOV SP, CX';
 						this.sp = this.cx;
+						break;
+					}
+					case 0xE8:
+					{
+						document.getElementById('opcode').innerHTML += '<br />' + 'MOV BP,AX';
+						this.bp = this.ax;
 						break;
 					}
 					case 0xEB:
@@ -463,10 +638,22 @@ function CPU(type,mem)
 				var modrm = this.memory[((this.cs<<4)+this.ip)+1];
 				switch(modrm)
 				{
+					case 0xC3:
+					{
+						document.getElementById('opcode').innerHTML += '<br />' + 'MOV ES, BX';
+						this.es = this.bx;
+						break;
+					}
 					case 0xC6:
 					{
 						document.getElementById('opcode').innerHTML += '<br />' + 'MOV ES, SI';
 						this.es = this.si;
+						break;
+					}
+					case 0xD0:
+					{
+						document.getElementById('opcode').innerHTML += '<br />' + 'MOV SS, AX';
+						this.ss = this.ax;
 						break;
 					}
 					case 0xD2:
@@ -505,6 +692,13 @@ function CPU(type,mem)
 				this.ip+=3;
 				break;
 			}
+			case 0xB9:
+			{
+				this.cx = (this.memory[((this.cs<<4)+this.ip)+2]<<8)|this.memory[((this.cs<<4)+this.ip)+1];
+				document.getElementById('opcode').innerHTML += '<br />' + 'MOV CX, ' + this.cx;
+				this.ip+=3;
+				break;
+			}
 			case 0xBA:
 			{
 				this.dx = (this.memory[((this.cs<<4)+this.ip)+2]<<8)|this.memory[((this.cs<<4)+this.ip)+1];
@@ -516,6 +710,20 @@ function CPU(type,mem)
 			{
 				this.bx = (this.memory[((this.cs<<4)+this.ip)+2]<<8)|this.memory[((this.cs<<4)+this.ip)+1];
 				document.getElementById('opcode').innerHTML += '<br />' + 'MOV BX, ' + this.bx;
+				this.ip+=3;
+				break;
+			}
+			case 0xBC:
+			{
+				this.sp = (this.memory[((this.cs<<4)+this.ip)+2]<<8)|this.memory[((this.cs<<4)+this.ip)+1];
+				document.getElementById('opcode').innerHTML += '<br />' + 'MOV SP, ' + this.sp;
+				this.ip+=3;
+				break;
+			}
+			case 0xBD:
+			{
+				this.bp = (this.memory[((this.cs<<4)+this.ip)+2]<<8)|this.memory[((this.cs<<4)+this.ip)+1];
+				document.getElementById('opcode').innerHTML += '<br />' + 'MOV BP, ' + this.bp;
 				this.ip+=3;
 				break;
 			}
@@ -569,6 +777,21 @@ function CPU(type,mem)
 				this.ip+=2;
 				break;
 			}
+			case 0xE8:
+			{
+				document.getElementById('opcode').innerHTML += '<br />' + 'CALL ' + (this.memory[((this.cs<<4)+this.ip)+2]<<8)|this.memory[((this.cs<<4)+this.ip)+1];
+				var tmp = (this.memory[((this.cs<<4)+this.ip)+2]<<8)|this.memory[((this.cs<<4)+this.ip)+1];
+				this.sp -= 2;
+				this.memory[(this.ss<<4)+this.sp] = this.ip >> 8;
+				this.memory[(this.ss<<4)+this.sp] = this.ip & 0xFF;
+				if(tmp >= 0x8000)
+				{
+					this.ip -= (~tmp + 1) & 0xFF;
+				}
+				else this.ip += tmp;
+				this.ip += 3;
+				break;
+			}
 			case 0xEB:
 			{
 				document.getElementById('opcode').innerHTML += '<br />' + 'JMP ' + this.memory[(this.cs<<4)+this.ip+1];
@@ -586,6 +809,27 @@ function CPU(type,mem)
 				document.getElementById('opcode').innerHTML += '<br />' + 'OUT DX, AL';
 				this.io_w(this.dx,this.ax&0xFF);
 				this.ip++;
+				break;
+			}
+			case 0xF3:
+			{
+				var op2 = this.memory[((this.cs<<4)+this.ip)+1];
+				switch(op2)
+				{
+					case 0xAB:
+					{
+						document.getElementById('opcode').innerHTML += '<br />' + 'REP STOSW';
+						for(;this.cx>0;this.cx--)
+						{
+							this.memory[(this.es<<4)+this.di] = (this.ax >> 8) & 0xFF;
+							this.memory[(this.es<<4)+this.di] = (this.ax & 0xFF);
+							if((~this.flags) &  0x0400) this.di += 2;
+							else this.di -= 2;
+						}
+						break;
+					}
+				}
+				this.ip+=2;
 				break;
 			}
 			case 0xF7:
