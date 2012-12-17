@@ -18,9 +18,9 @@
 				var biosfile = document.forms['upload']['bios'].files[0];
 				memory.set(biosa,0x100000 - biosfile.size);
 				var cpu = new CPU('8086',memory);
-				for(var i = 0;i<160;i++)
+				for(var i = 0;i<131072;i++)
 				{
-					cpu.exec();
+					setTimeout(cpu.exec,25);
 				}
 			}
 			function start()
