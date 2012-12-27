@@ -38,6 +38,37 @@ function PIC()
 	self.vector_base = 0;
 }
 
+function setPixel(imageData, x, y, r, g, b)
+{			
+	var index = (x + y * imageData.width) * 4;
+	imageData.data[index+0] = r;
+	imageData.data[index+1] = g;
+	imageData.data[index+2] = b;
+	imageData.data[index+3] = 255;
+}
+
+function MDA(mem)
+{
+	var self = this;
+	self.rom = new Uint8Array(0x2000);
+	self.ram = mem;
+	self.mode = 1;
+	self.renderpixel = function(x,y)
+	{
+		var addr = (((x/9)+((y/14)*80))<<1) + 0xB0000;
+		var screen = document.getElementById('screen');
+		var context = screen.getContext('2d');
+
+		var data = context.createImageData(screen.width,screen.height);
+		var chr = (self.ram[addr] * 14);
+		var put = self.rom[(chr%14)]<<1;
+		put <<= x % 9;
+		if(put&0x100) setPixel(data,x,y,0x80,0x80,0x80);
+		else setPixel(data,x,y,0,0,0);
+		context.putImageData(data,0,0);
+	}
+}
+
 function CPU(type,mem)
 {
 	var self = this;
@@ -56,6 +87,11 @@ function CPU(type,mem)
 	self.pit = new PIT();
 	self.dma = new DMA();
 	self.pic = new PIC();
+	self.isa1n = document.getElementById('isa1').options[document.getElementById('isa1').selectedIndex].text;
+	if(self.isa1n == 'MDA')
+	{
+		self.isa1 = new MDA(self.memory);
+	}
 	self.io_r = function(addr)
 	{
 	}
@@ -191,6 +227,10 @@ function CPU(type,mem)
 			{
 				self.pit.accessm = (data & 0x30) >> 4;
 				self.pit.mode = (data & 0x0E) >> 1;
+				break;
+			}
+			case 0x3B8:
+			{
 				break;
 			}
 			default:
@@ -502,6 +542,34 @@ function CPU(type,mem)
 				else self.flags &= 0xFF7F;
 				break;
 			}
+			case 0x2E:
+			{
+				var op2 = self.memory[((self.cs<<4)+self.ip)+1];
+				switch(op2)
+				{
+					case 0xFF:
+					{
+						var modrm = self.memory[((self.cs<<4)+self.ip)+2];
+						switch(modrm)
+						{
+							case 0xA7:
+							{
+								var tmp = (self.memory[((self.cs<<4)+self.ip)+4]<<8)|self.memory[((self.cs<<4)+self.ip)+3];
+								//document.getElementById('opcode').innerHTML += '<br />' + 'JMP WORD PTR CS:[BX+' + tmp + ']';
+								var tmp1 = self.bx;
+								if(tmp >= 0x8000) tmp1 -= (~tmp + 1) & 0xFF;
+								else tmp1 += tmp;
+								var tmp2 = (self.memory[((self.cs<<4)+tmp1)+1]<<8)|self.memory[((self.cs<<4)+tmp1)];
+								self.ip = tmp2;
+								break;
+							}
+						}
+						break;
+					}
+				}
+				self.ip+=2;
+				break;
+			}
 			case 0x32:
 			{
 				var modrm = self.memory[((self.cs<<4)+self.ip)+1];
@@ -595,6 +663,25 @@ function CPU(type,mem)
 					}
 				}
 				self.ip+=2;
+				break;
+			}
+			case 0x3C:
+			{
+				var tmp = self.memory[((self.cs<<4)+self.ip)+1];
+				var tmp1 = ((self.ax & 0XFF) - tmp) & 0xFF;
+				//document.getElementById('opcode').innerHTML += '<br />' + 'CMP AL, ' + tmp;
+				self.ip+=2;
+				if(tmp1 == 0) self.flags |= 0x0040;
+				else self.flags &= 0xFFBF;
+				var tmp2 = 0;
+				for(var i = 0;i<8;i++)
+				{
+					if(tmp1 & (1<<i)) tmp2 = (tmp2 + 1) & 1;
+				}
+				if(tmp2&1) self.flags &= 0xFFFB;
+				else self.flags |= 0x0004;
+				if(tmp1>=0x80) self.flags |= 0x0080;
+				else self.flags &= 0xFF7F;
 				break;
 			}
 			case 0x3D:
@@ -801,6 +888,21 @@ function CPU(type,mem)
 				self.ip += 2;
 				break;
 			}
+			case 0x76:
+			{
+				//document.getElementById('opcode').innerHTML += '<br />' + 'JBE ' + self.memory[(self.cs<<4)+self.ip+1];
+				var tmp = self.memory[(self.cs<<4)+self.ip+1];
+				if((self.flags & 0x0040) | (self.flags & 0x0001))
+				{
+					if(self.memory[(self.cs<<4)+self.ip+1] >= 0x80)
+					{
+						self.ip -= (~tmp + 1) & 0xFF;
+					}
+					else self.ip += tmp;
+				}
+				self.ip += 2;
+				break;
+			}
 			case 0x78:
 			{
 				//document.getElementById('opcode').innerHTML += '<br />' + 'JS ' + self.memory[(self.cs<<4)+self.ip+1];
@@ -851,6 +953,13 @@ function CPU(type,mem)
 				var modrm = self.memory[((self.cs<<4)+self.ip)+1];
 				switch(modrm)
 				{
+					case 0xC2:
+					{
+						var tmp = self.memory[((self.cs<<4)+self.ip)+2];
+						//document.getElementById('opcode').innerHTML += '<br />' + 'ADD DL, ' + tmp;
+						self.dx = (self.dx & 0xFF00) | ((self.dx & 0xFF) + tmp);
+						break;
+					}
 					case 0xC7:
 					{
 						var tmp = self.memory[((self.cs<<4)+self.ip)+2];
@@ -947,6 +1056,15 @@ function CPU(type,mem)
 				var modrm = self.memory[((self.cs<<4)+self.ip)+1];
 				switch(modrm)
 				{
+					case 0x16:
+					{
+						var tmp = (self.memory[((self.cs<<4)+self.ip)+2]<<8)|self.memory[((self.cs<<4)+self.ip)+1];
+						//document.getElementById('opcode').innerHTML += '<br />' + 'MOV WORD PTR DS:' + tmp + ', DX';
+						self.memory[((self.ds<<4)+tmp)] = self.dx >> 8;
+						self.memory[((self.ds<<4)+tmp)+1] = self.dx & 0xFF;
+						self.ip+=2;
+						break;
+					}
 					case 0x36:
 					{
 						var tmp = (self.memory[((self.cs<<4)+self.ip)+2]<<8)|self.memory[((self.cs<<4)+self.ip)+1];
@@ -960,7 +1078,7 @@ function CPU(type,mem)
 				self.ip+=2;
 				break;
 			}
-			case 0x89:
+			case 0x8A:
 			{
 				var modrm = self.memory[((self.cs<<4)+self.ip)+1];
 				switch(modrm)
@@ -969,8 +1087,14 @@ function CPU(type,mem)
 					{
 						var tmp = (self.memory[((self.cs<<4)+self.ip)+2]<<8)|self.memory[((self.cs<<4)+self.ip)+1];
 						//document.getElementById('opcode').innerHTML += '<br />' + 'MOV BL, BYTE PTR DS:' + tmp;
-						self.memory[(self.ds<<4)+tmp] = self.bx & 0xFF;
+						self.bx = (self.bx & 0xFF00) | self.memory[(self.ds<<4)+tmp];
 						self.ip+=2;
+						break;
+					}
+					case 0xDC:
+					{
+						//document.getElementById('opcode').innerHTML += '<br />' + 'MOV BL, AH';
+						self.bx = (self.bx & 0xFF00) | ((self.ax & 0xFF00) >> 8);
 						break;
 					}
 				}
@@ -1152,6 +1276,15 @@ function CPU(type,mem)
 				//document.getElementById('opcode').innerHTML += '<br />NOP';
 				break;
 			}
+			case 0xA0:
+			{
+				var tmp = (self.memory[((self.cs<<4)+self.ip)+2]<<8)|self.memory[((self.cs<<4)+self.ip)+1];
+				//document.getElementById('opcode').innerHTML += '<br />' + 'MOV AL, BYTE PTR DS:' + tmp;
+				var tmp1 = (self.ds<<4)+tmp;
+				self.ax = (self.ax & 0xFF00) | self.memory[tmp1];
+				self.ip+=3;
+				break;
+			}
 			case 0xA2:
 			{
 				var tmp = (self.memory[((self.cs<<4)+self.ip)+2]<<8)|self.memory[((self.cs<<4)+self.ip)+1];
@@ -1213,10 +1346,24 @@ function CPU(type,mem)
 				self.ip+=2;
 				break;
 			}
+			case 0xB3:
+			{
+				self.bx = (self.bx & 0xFF00) | self.memory[((self.cs<<4)+self.ip)+1];
+				//document.getElementById('opcode').innerHTML += '<br />' + 'MOV BL, ' + (self.bx & 0xFF);
+				self.ip+=2;
+				break;
+			}
 			case 0xB4:
 			{
 				self.ax = (self.ax & 0xFF) | (self.memory[((self.cs<<4)+self.ip)+1]<<8);
 				//document.getElementById('opcode').innerHTML += '<br />' + 'MOV AH, ' + ((self.ax & 0xFF00)>>8);
+				self.ip+=2;
+				break;
+			}
+			case 0xB7:
+			{
+				self.bx = (self.bx & 0xFF) | (self.memory[((self.cs<<4)+self.ip)+1]<<8);
+				//document.getElementById('opcode').innerHTML += '<br />' + 'MOV BH, ' + ((self.bx & 0xFF00)>>8);
 				self.ip+=2;
 				break;
 			}
@@ -1276,6 +1423,21 @@ function CPU(type,mem)
 				self.sp+=2;
 				break;
 			}
+			case 0xC6:
+			{
+				var modrm = self.memory[((self.cs<<4)+self.ip)+1];
+				switch(modrm)
+				{
+					case 0x07:
+					{
+						self.memory[(self.ds<<4)+self.bx] = self.memory[((self.cs<<4)+self.ip)+2];
+						//document.getElementById('opcode').innerHTML += '<br />' + 'MOV WORD PTR DS:[BX], ' + self.memory[((self.cs<<4)+self.ip)+2];
+						break;
+					}
+				}
+				self.ip+=3;
+				break;
+			}
 			case 0xC7:
 			{
 				var modrm = self.memory[((self.cs<<4)+self.ip)+1];
@@ -1317,6 +1479,25 @@ function CPU(type,mem)
 				self.memory[(self.ss<<4)+self.sp] = (self.ip+2) >> 8;
 				self.cs = (self.memory[(tmp<<2)+2]<<8)|self.memory[(tmp<<2)+3];
 				self.ip = (self.memory[(tmp<<2)+1]<<8)|self.memory[(tmp<<2)];
+				break;
+			}
+			case 0xD0:
+			{
+				var modrm = self.memory[((self.cs<<4)+self.ip)+1];
+				switch(modrm)
+				{
+					case 0xE4:
+					{
+						if((self.ax & 0xFF00) >= 0x8000) self.flags |= 0x0001;
+						else self.flags &= 0xFFFE;
+						self.ax = ((self.ax&0xFF) | ((self.ax&0xFF00)<<1)) & 0xFFFF;
+						//document.getElementById('opcode').innerHTML += '<br />' + 'SHL AH, 1';
+						if((self.ax & 0xFF00) == 0) self.flags |= 0x0040;
+						else self.flags &= 0xFFBF;
+						break;
+					}
+				}
+				self.ip+=2;
 				break;
 			}
 			case 0xD1:
@@ -1399,7 +1580,7 @@ function CPU(type,mem)
 				self.memory[(self.ss<<4)+self.sp+1] = (self.ip + 3) & 0xFF;
 				if(tmp >= 0x8000)
 				{
-					self.ip -= (~tmp + 1) & 0xFF;
+					self.ip -= (~tmp + 1) & 0xFFFF;
 				}
 				else self.ip += tmp;
 				self.ip += 3;

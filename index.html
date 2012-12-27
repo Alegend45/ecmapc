@@ -10,28 +10,56 @@
 				imageData.data[index+2] = b;
 				imageData.data[index+3] = 255;
 			}
-			function rstart(evt)
+			function rstart()
 			{
+				this.pixx = 0;
+				this.pixy = 0;
+				this.exec = function(evt){
 				var bios = evt.target.result;
 				var biosa = new Uint8Array(bios);
 				var memory = new Uint8Array(0X100000);
 				var biosfile = document.forms['upload']['bios'].files[0];
 				memory.set(biosa,0x100000 - biosfile.size);
 				var cpu = new CPU('8086',memory);
+				var mdachrfile = document.forms['upload']['mdachr'].files[0];
+				var reader = new FileReader();
+				reader.readAsArrayBuffer(mdachrfile);
+				cpu.isa1.rom = new Uint8Array(evt.target.result);
 				for(var i = 0;i<131072;i++)
 				{
-					setTimeout(cpu.exec,25);
+					setTimeout(cpu.exec,50);
+					var isa1_card1 = document.getElementById('isa1').selectedIndex;
+					var isa1_card = document.getElementById('isa1').options[isa1_card1].text;
+
+					if(isa1_card == 'MDA')
+					{
+						var self = this;
+						setTimeout(
+						function(){
+							cpu.isa1.renderpixel(window.rstart.pixx,window.rstart.pixy);
+						},50);
+						this.pixx++;
+						if(this.pixx >= 720)
+						{
+							this.pixx=0;
+							this.pixy++;
+							if(this.pixy>=350) pixy=0;
+						}
+					}
+				}
 				}
 			}
 			function start()
 			{
+				this.rs = new rstart;
+				this.exec = function(){
 				var isa1_card1 = document.getElementById('isa1').selectedIndex;
 				var isa1_card = document.getElementById('isa1').options[isa1_card1].text;
 
 				var screen = document.getElementById('screen');
 				var context = screen.getContext('2d');
 
-				var data = context.createImageData(w,h);
+				var data = context.createImageData(screen.width,screen.height);
 				
 				switch(isa1_card)
 				{
@@ -65,7 +93,8 @@
 				{
 					var reader = new FileReader();
 					reader.readAsArrayBuffer(biosfile);
-					reader.onload = rstart;
+					reader.onload = this.rs.exec;
+				}
 				}
 			}
 		</script>
@@ -75,7 +104,7 @@
 		<p>Main BIOS File: </p>
 		<form id="upload">
 		<input type="file" id="bios" />
-		<input type="button" value="Submit" onclick="start();" />
+		<input type="button" value="Submit" onclick="s.exec();" />
 		<p id="video">MDA ROM File: </p>
 		<input type="file" id="mdachr" />
 		<p>First ISA card slot:</p>
@@ -115,6 +144,7 @@
 			{
   				alert('Your browser sucks, get a better one.');
 			}
+			var s = new start;
 		</script>
 		<br />
 		<br />
